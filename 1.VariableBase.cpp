@@ -3,15 +3,36 @@
 #include <map>
 #include <list>
 #include <vector>
-#include <Eigen/Dense>
-#include "Storage.hpp"
 
 std::map<size_t, std::vector<size_t>> affectionMap;
+template <typename T>
+class StorageInterface {
+public:
+    virtual T get() const = 0; // Get the value
+    virtual void set(T value) = 0; // Set the value
+    virtual ~StorageInterface() = default; // Virtual destructor for polymorphism
+};
+template <typename T>
+class DirectStorage : public StorageInterface<T> {
+private:
+    std::shared_ptr<T> value; // Directly store the value
 
-template <typename T, typename StorageType>
+public:
+    DirectStorage(T initialValue = -1) : value(std::make_shared<T>(initialValue)) {}
+
+    T get() const override {
+        return *value;
+    }
+
+    void set(T newValue) override {
+        *value = (newValue);
+    }
+};
+
+template <typename T, template <typename> class StorageType>
 class Value {
 protected:
-    StorageType storage;
+    StorageType <T> storage;
 public:
     Value() : storage() {
         std::cout << "b";
@@ -40,10 +61,10 @@ public:
     // Pure virtual method to evaluate and return type T
     virtual T evaluate() const = 0;
 };
-template <typename T, typename Storage>
+template <typename T, template <typename> class Storage>
 class Variable;
 
-template <typename T, typename T1, typename T2, typename S >
+template <typename T, typename T1, typename T2, template <typename> class S >
 class ProductOperator : public OperatorBase<T> {
     std::shared_ptr<Value<T1, S>> lhs;
     std::shared_ptr<Value<T2, S>> rhs;
@@ -78,7 +99,7 @@ public:
         return operation(lhs, rhs);
     }
 };
-template <typename T, typename StorageType>
+template <typename T, template <typename> class StorageType>
 class Variable : public Value<T, StorageType> {
     size_t id;
     struct SharedState {
@@ -101,10 +122,10 @@ public:
 
     }
 
-    template <typename T1, typename T2>
-    friend Variable<decltype(T1()* T2()), StorageType> operator *(Variable<T1, StorageType>& lhs, Variable<T2, StorageType>& rhs) {
+    template <typename T1, typename T2, template  <typename> class S >
+    friend Variable<decltype(T1()* T2()), S> operator *(Variable<T1, S>& lhs, Variable<T2, S>& rhs) {
         using ReturnType = decltype(T1()* T2());
-        return Variable<ReturnType, StorageType>(ProductOperator<ReturnType, T1, T2, StorageType>(lhs, rhs));
+        return Variable<ReturnType, S>(ProductOperator<ReturnType, T1, T2, S>(lhs, rhs));
     }
     T getValue() override {
         if (!state->computed)
@@ -118,17 +139,11 @@ public:
 
 int main()
 {
-    Variable<int, DirectStorage<int>>  a(2);
-    Variable<int, DirectStorage<int>>  b(3);
+    Variable<int, DirectStorage>  a(2);
+    Variable<int, DirectStorage>  b(3);
     auto  c = a * b;
     auto d = c * b;
     std::cout << c.getValue();
     std::cout << d.getValue();
-    Eigen::MatrixXf A(4, 3);
-    A << 1.0, 2.0, 3.0,
-        4.0, 5.0, 6.0,
-        7.0, 8.0, 9.0,
-        10.0, 11.0, 12.0;
-    Variable<Eigen::MatrixXf, GPUStorage>  gg(A);
-
+    Variable<int, DirectStorage>  a(2);
 }
