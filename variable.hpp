@@ -1,7 +1,14 @@
 #ifndef VARIABLE_H
 #define VARIABLE_H
+#include <set>
+class SymbolBase;
+template <typename T, bool Cache=true>
+class Symbol;
+
+std::map<SymbolBase*,std::set<SymbolBase*>> affectionMap;
+
 template <typename T, typename Derived>
-class Variable
+class Variable 
 {
 public:
     using value_type = T; // T 타입을 알기 위해 추가
@@ -14,24 +21,93 @@ public:
     Derived &self() { return static_cast<Derived &>(*this); }
 };
 
-template <typename T>
-class Symbol : public Variable<T, Symbol<T>>
+class SymbolBase
 {
+    public:
+    virtual void SetDirty() =0;
+    virtual ~SymbolBase() = default;
+};
 
+template <typename T>
+class Symbol<T,true> : public Variable<T, Symbol<T>>, public SymbolBase
+{
 public:
-    T val;
+    std::function<T()> compute;
+    std::vector<SymbolBase*> affectingSymbols;
     bool computed = false;
+    T val;
     Symbol()
     {
+        affectionMap[this] = std::set<SymbolBase*>();
     }
     Symbol(Symbol&& other) = delete;
     Symbol(Symbol& other) = delete;
+    
+    void SetDirty(){
+        computed = false;
+        for(auto& affected: affectionMap[this])
+        {
+            affected->SetDirty();
+        }
+    }
     T eval()
     {
         if (computed)
             return val;
         else
-            return compute();
+        {
+            computed = true;
+            val = compute();
+            return val;
+        }
+    }
+
+   
+    
+    void usedSymbols(std::vector<SymbolBase*>& list)
+    {
+        list.push_back(this);
+    }
+    template <typename D>
+    auto operator=(std::unique_ptr<D> g)
+    {
+        computed = false;
+        affectingSymbols.clear();
+        (*g).usedSymbols(affectingSymbols);
+        for( auto& v : affectingSymbols)
+        {
+            affectionMap[v].insert(this);
+        }
+        auto ss = std::make_shared<D>(std::move(*g));
+        compute = [ss]() -> T
+        { return ss->eval(); };
+    }
+    
+    auto operator=(T val_)
+    {
+        val = val_;
+        affectingSymbols.clear();
+        for(auto& affected: affectionMap[this])
+        {
+            affected->SetDirty();
+        }
+        computed = true;
+    }
+};
+
+template <typename T>
+class Symbol<T,false> : public Variable<T, Symbol<T>>, public SymbolBase
+{
+public:
+    Symbol()
+    {
+    }
+    Symbol(Symbol&& other) = delete;
+    Symbol(Symbol& other) = delete;
+
+    T eval()
+    {
+        return compute();
     }
 
     std::function<T()> compute;
@@ -39,18 +115,29 @@ public:
     template <typename D>
     auto operator=(std::unique_ptr<D> g)
     {
-        computed = false;
         auto ss = std::make_shared<D>(std::move(*g));
         compute = [ss]() -> T
         { return ss->eval(); };
     }
+    
     auto operator=(T val_)
     {
-        val = val_;
-        computed = true;
+        compute = [val_]() -> T
+        { return val_; };
     }
 };
 
+template <typename T>
+void callUsedSymbols(T&& obj, std::vector<SymbolBase*>& list) {
+    if constexpr (is_unique_ptr<T>::value) {
+        obj->usedSymbols(list);
+    } else {
+        if constexpr (!std::is_arithmetic_v<std::decay_t<T>>)
+        {
+           obj.usedSymbols(list);
+        }            
+    }
+}
 template <typename T, typename D1, typename D2>
 class AddOperator : public Variable<T, AddOperator<T, D1, D2>>
 {
@@ -66,7 +153,13 @@ public:
     // Implement the evaluate function
     T eval()
     {
-       return OperandTrait<D1>::eval(std::forward<D1>(lhs)) + OperandTrait<D2>::eval(std::forward<D2>(rhs));
+       return OperandTrait<D1>::eval(lhs) + OperandTrait<D2>::eval(rhs);
+    }
+    
+    void usedSymbols(std::vector<SymbolBase*>& list)
+    {
+        callUsedSymbols(lhs,list);
+        callUsedSymbols(rhs,list);
     }
 };
 
@@ -85,45 +178,37 @@ public:
     // Implement the evaluate function
     T eval()
     {
-        if constexpr (is_unique_ptr<D1>::value)
-        {
-            if constexpr (is_unique_ptr<D2>::value)
-            {
-                return lhs->eval() * rhs->eval();
-            }
-            else
-            {
-                return lhs->eval() * rhs.eval();
-            }
-        }
-        else
-        {
-            if constexpr (is_unique_ptr<D2>::value)
-            {
-                return lhs.eval() * rhs->eval();
-            }
-            else
-            {
-                return lhs.eval() * rhs.eval();
-            }
-        }
+        return OperandTrait<D1>::eval(lhs) * OperandTrait<D2>::eval(rhs);
+    }
+    void usedSymbols(std::vector<SymbolBase*>& list)
+    {
+        callUsedSymbols(lhs,list);
+        callUsedSymbols(rhs,list);
     }
 };
 
-template <typename T>
-class Number : public Variable<T, Number<T>>
+template <typename T, typename D1, typename D2>
+class MinusOperator : public Variable<T, MinusOperator<T, D1, D2>>
 {
-    T val;
+    D1 lhs;
+    D2 rhs;
 
 public:
-    Number(T &va) : val(va)
+    template <typename U1, typename U2>
+    MinusOperator(U1 &&l, U2 &&r) : lhs(std::forward<U1>(l)),
+                                  rhs(std::forward<U2>(r))
     {
     }
-    Number(T &&va) : val(va)
+    // Implement the evaluate function
+    T eval()
     {
+       return OperandTrait<D1>::eval(lhs) - OperandTrait<D2>::eval(rhs);
     }
-    T eval() { return val; }
+    
+    void usedSymbols(std::vector<SymbolBase*>& list)
+    {
+        callUsedSymbols(lhs,list);
+        callUsedSymbols(rhs,list);
+    }
 };
-
-
 #endif
