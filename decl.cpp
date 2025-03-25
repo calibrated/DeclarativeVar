@@ -1,4 +1,4 @@
-
+﻿
 #include <iostream>
 #include <map>
 #include "op.hpp"
@@ -23,14 +23,26 @@ auto operator*(T&& v, U &&rhs)
 
 int main()
 {
+    Symbol<Array<int>,true> list;
     Symbol<int> a;
     Symbol<int> c;
+    Array<int> bb(5);
+    bb[0] = 1;
+    /*bb[1] = a + 1;
+    bb[2] = a + 1;*/
+    /*list = [&a]()->Array<int> {
+      
+        return bb;
+    };*/
+
+    
  
     c = (a + 1) * a;
     a= 2;
     std::cout <<  c.eval();
     a = 3;
     std::cout <<  c.eval();
+
     std::vector<Symbol<int>> arr = std::vector<Symbol<int>>(5);
     
     for (int i = 0; i < 5; i++)

@@ -1,17 +1,26 @@
 #ifndef VARIABLE_H
 #define VARIABLE_H
 #include <set>
+#include <vector>
+
+#include "op.hpp"
 class SymbolBase;
+
+
 template <typename T, bool Cache=true>
 class Symbol;
 
 std::map<SymbolBase*,std::set<SymbolBase*>> affectionMap;
 
+template <typename T>
+class VariableBase
+{
+};
 template <typename T, typename Derived>
-class Variable 
+class Variable  : public VariableBase<T>
 {
 public:
-    using value_type = T; // T 타입을 알기 위해 추가
+    using variable_type = T; // T 타입을 알기 위해 추가
     Variable()
     {
     }
@@ -27,7 +36,49 @@ class SymbolBase
     virtual void SetDirty() =0;
     virtual ~SymbolBase() = default;
 };
+template < typename T>
+class Array;
 
+template <typename T>
+class Accessor
+{
+    Array<T>* arr;
+    int n;
+public:
+    Accessor(Array<T>* arr_, int n_):arr(arr_),n(n_)
+    {
+    }
+
+    template <typename U>
+    auto operator = (U&& v) {
+        arr->Set(n, OperandTrait<U>::value(v));
+    }
+};
+
+template <typename T>
+class Array : public Variable<T, Array<T>>
+{ 
+    std::vector<std::unique_ptr<VariableBase<T>>> arr;
+public:
+    Array()
+    {
+        //arr.size(n);
+    }
+    Array(int n)
+    {
+        arr.size(n);
+    }
+    Accessor<T> operator [](int n)
+    {
+        return Accessor<T>(this, n);
+    }
+    template <typename U>
+    auto Set(int n, U&& t)
+    {
+        //arr[n] =  OperandTrait<U>::value(t);
+    }
+};
+#include <functional>
 template <typename T>
 class Symbol<T,true> : public Variable<T, Symbol<T>>, public SymbolBase
 {
@@ -92,6 +143,10 @@ public:
             affected->SetDirty();
         }
         computed = true;
+    }
+    Symbol<T>& operator = (std::function<T()> ff)
+    {
+        return *this;
     }
 };
 
