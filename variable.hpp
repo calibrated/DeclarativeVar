@@ -252,7 +252,7 @@ auto op_binary(T &&lhs, U &&rhs)
    ContainerTrait<U>::value(std::forward<U>(rhs))));
 }
 
-template <typename T, typename U>
+template <typename T, typename U,typename = std::enable_if_t<is_variable<T>::value ||is_variable<U>::value  >>
 auto operator+(T&& v, U &&rhs)
 {
     return op_binary<AddOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs));
