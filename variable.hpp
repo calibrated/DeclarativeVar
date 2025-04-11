@@ -214,7 +214,8 @@ class MinusOperator : public BinaryOp<T, D1, D2, MinusOperator<T, D1, D2>>
 };
 
 template <typename T>
-using Transformed = typename ElementTrait<typename ContainerTrait<T>::type>::type;
+using Transformed = typename ElementTrait<T>::type;
+//using Transformed = typename ElementTrait<typename ContainerTrait<T>::type>::type;
 
 template <auto Func, typename... Args>
 class FunctionOperator : public Variable<
@@ -242,12 +243,12 @@ FunctionOperator<Func, Args...>>
 };
 
 
-template <template <typename...> class OP, typename T, typename U>
-auto op_binary(T &&lhs, U &&rhs)
+template <template <typename...> class OP, typename T, typename U, typename opsymbol>
+auto op_binary(T &&lhs, U &&rhs,opsymbol ops)
 {
    using LT = typename ContainerTrait<T>::type;
    using RT = typename ContainerTrait<U>::type;
-   using RET = decltype( std::declval<typename ElementTrait<T>::type>()+ std::declval<typename ElementTrait<U>::type>());
+   using RET = decltype( ops(std::declval<typename ElementTrait<T>::type>(), std::declval<typename ElementTrait<U>::type>()));
    return std::make_shared<OP<RET, LT, RT>>(OP<RET, LT, RT>(ContainerTrait<T>::value(std::forward<T>(lhs)), 
    ContainerTrait<U>::value(std::forward<U>(rhs))));
 }
@@ -255,17 +256,17 @@ auto op_binary(T &&lhs, U &&rhs)
 template <typename T, typename U,typename = std::enable_if_t<is_variable<T>::value ||is_variable<U>::value  >>
 auto operator+(T&& v, U &&rhs)
 {
-    return op_binary<AddOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs));
+    return op_binary<AddOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs), std::plus<>());
 }
-template <typename T, typename U>
+template <typename T, typename U,typename = std::enable_if_t<is_variable<T>::value ||is_variable<U>::value  >>
 auto operator-(T&& v, U &&rhs)
 {
-    return op_binary<MinusOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs));
+    return op_binary<MinusOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs),std::minus<>());
 }
-template <typename T, typename U>
+template <typename T, typename U,typename = std::enable_if_t<is_variable<T>::value ||is_variable<U>::value  >>
 auto operator*(T&& v, U &&rhs)
 {
-    return op_binary<ProductOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs));
+    return op_binary<ProductOperator,T,U>(std::forward<T>(v) , std::forward<U>(rhs),std::multiplies<>());
 }
 
 template <auto Func, typename... Args>
